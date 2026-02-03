@@ -8,7 +8,7 @@ This project will utilize a MVC infrastructure which allows for the user to enga
 
 - Users to login into their account annd interact with previously saved databases.
 - Create or import pre-existing databases.
-- Modify or search databases utilizing easy to use, customizable written prompts.
+- Modify or search databases utilizing easy to use, customizable written prompts or through the manual database viewer.
 - Gemini can ask the user for clarification if there’s ambiguities in the prompt before generating the sql.
 - Visualize the data dynamically using graphs instead of outputting all the rows from the database.
 - Display the sql generated to the user with an option for Gemini to generate a short explanation of what the sql does.
