@@ -1,10 +1,10 @@
 # Projects2026CPS485
-##SQL Smart Database Manager
+## SQL Smart Database Manager
 Webapp that allows users to create and manage SQL databases that utilizes Gemini as the main driver for smart interactions with the database. This allows for easy access and usability for anyone without the requirement of intesive training on SQL and database management. 
 
 This project will utilize a MVC infrastructure which allows for the user to engage with the program at a surface level without the need to consider the computations needed for an easy to use program. 
 
-##Features for Smart Database Manager
+## Features for Smart Database Manager
 
 - Create or import pre-existing databases
 - Modify or search databases utilizing easy to use, customizable written prompts
