@@ -1,5 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/python,macos,visualstudiocode
-# Edit at https://www.toptal.com/developers/gitignore?templates=python,macos,visualstudiocode
+# Created by https://www.toptal.com/developers/gitignore/api/macos,python,visualstudiocode
+# Edit at https://www.toptal.com/developers/gitignore?templates=macos,python,visualstudiocode
 
 ### macOS ###
 # General
@@ -225,4 +225,4 @@ pyrightconfig.json
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/python,macos,visualstudiocode
+# End of https://www.toptal.com/developers/gitignore/api/macos,python,visualstudiocode
