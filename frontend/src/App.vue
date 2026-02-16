@@ -1,6 +1,8 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import NavBar from './components/NavBar.vue';
 </script>
+
 
 <template>
   <header>
@@ -9,11 +11,11 @@ import { RouterLink, RouterView } from 'vue-router'
     <div class="wrapper">
       <nav>
         <h1>Smart Database Manager</h1>
-        <RouterLink to="/InputPage">Input Page</RouterLink>
+        <RouterLink to="/input">Input Page</RouterLink>
       </nav>
     </div>
   </header>
-
+  <NavBar />
   <RouterView />
 </template>
 
