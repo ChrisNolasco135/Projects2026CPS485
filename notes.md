@@ -18,6 +18,14 @@ In order to work on the MVC architecture we need a model, view and a controller 
 - Implemented inital basic FastAPI backend
 
 ## 3/10-3/17
+### Christopher Nolasco
+- Created NavBar component in upper part of the webpage for easy access to login and register prompts
+    - Added Login prompt and submit button for pre-existing users (none for now)
+    - Added Register prompt and submit button to add users to database
+- Used Axios for 'application/x-www-form-urlencoded' posts to the backend for OAuth2 authorization tokens for Login
+    - Changed auth.js to now use application/x-www-form-urlencoded as the content-type rather than json responses for authentication requests
+
+    
 ### Nathan Polarski
 - implemented the backend functionality for user accounts
     - Added user account database model for MVC architecture using SQLAlchemy and SQLite
