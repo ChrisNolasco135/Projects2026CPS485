@@ -1,4 +1,7 @@
 import { defineStore } from 'pinia'
+import axios from 'axios'
+
+const API = 'http://localhost:8000'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -10,65 +13,40 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: (state) => !!state.token
   },
 
-  actions: {
-    async login(username, password) {
-      if (username && password) {
-        this.user = username
-        this.token = 'demo-token'
-      }
-    },
-
-    /*
-    async login(username, password) {
-    const res = await fetch('http://localhost:8000/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+actions: {
+  async login(username, password) {
+    const params = new URLSearchParams()
+    params.append('username', username)
+    params.append('password', password)
+    const res = await axios.post(`${API}/login`, params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     })
-
-    if (!res.ok) throw new Error('Invalid credentials')
-
-    const data = await res.json()
-    this.user = data.username
-    this.token = data.token
-    }
-    */
-
-    async register(email, username, password) {
-      if (email && username && password) {
-        this.user = username
-        this.token = 'demo-token'
-      }
-    },
-
-
-    /*
-    async register(email, username, password) {
-    const res = await fetch('http://localhost:8000/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email,
-      username,
-      password
+    this.token = res.data.access_token
+    // Optionally fetch user info:
+    const userRes = await axios.get(`${API}/users/me`, {
+      headers: { Authorization: `Bearer ${this.token}` }
     })
+    this.user = userRes.data.username
+    // Persist token if desired:
+    localStorage.setItem('token', this.token)
+  },
+
+  async register(email, username, password) {
+    const res = await axios.post(`${API}/register`, {
+      email, username, password
     })
+  },
 
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.message || 'Registration failed')
-    }
+  logout() {
+    this.user = null
+    this.token = null
+    localStorage.removeItem('token')
+  },
 
-    const data = await res.json()
-
-    this.user = data.username
-    this.token = data.token
-    }
-    */
-
-    logout() {
-      this.user = null
-      this.token = null
-    }
+  // Restore token on app start
+  initFromLocal() {
+    const t = localStorage.getItem('token')
+    if (t) this.token = t
   }
+}
 })
