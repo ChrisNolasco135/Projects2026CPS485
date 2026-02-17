@@ -16,3 +16,13 @@ In order to work on the MVC architecture we need a model, view and a controller 
     - Built-in data validation
         - If Vue frontend sends malformed data, FastAPI rejects it with a clear 422 error detailing exactly which field failed.
 - Implemented inital basic FastAPI backend
+
+## 3/10-3/17
+### Nathan Polarski
+- implemented the backend functionality for user accounts
+    - Added user account database model for MVC architecture using SQLAlchemy and SQLite
+    - Created User account creation endpoint (`/register`) allowing username, email, and password
+    - Created Login endpoint (`/token`) using OAuth2 with Password Flow and JWT tokens
+        - user's username and password exchanged directly for a JWT access token that lasts 30 minutes
+    - Created User information endpoint (`/users/me`) to retrieve logged-in account details
+    - Added comprehensive comments and documentation to all backend code
