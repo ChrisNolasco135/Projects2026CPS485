@@ -7,8 +7,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
-from . import crud, models, schemas, auth
-from .database import SessionLocal, engine
+import crud, models, schemas, auth
+from database import SessionLocal, engine
 
 # Create database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
