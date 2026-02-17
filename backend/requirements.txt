@@ -1,2 +1,7 @@
 fastapi==0.128.6
 uvicorn==0.40.0
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+email-validator
