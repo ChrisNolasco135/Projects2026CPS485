@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, List
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -116,6 +116,73 @@ async def read_users_me(
     Requires authentication (valid JWT token).
     """
     return current_user
+
+@app.post("/databases/", response_model=schemas.Database)
+def create_database(
+    database: schemas.DatabaseCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new database for the current user.
+    """
+    return crud.create_database(db=db, database=database, user_id=current_user.id)
+
+@app.get("/databases/", response_model=List[schemas.Database])
+def read_databases(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    List all databases for the current user.
+    """
+    databases = crud.get_databases(db, user_id=current_user.id, skip=skip, limit=limit)
+    return databases
+
+@app.get("/databases/{database_id}", response_model=schemas.Database)
+def read_database(
+    database_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific database by ID.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if db_database is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return db_database
+
+@app.put("/databases/{database_id}", response_model=schemas.Database)
+def update_database(
+    database_id: int,
+    database: schemas.DatabaseCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Update a database (save changes).
+    """
+    db_database = crud.update_database(db, database_id=database_id, database=database, user_id=current_user.id)
+    if db_database is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return db_database
+
+@app.delete("/databases/{database_id}", response_model=bool)
+def delete_database(
+    database_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a database.
+    """
+    success = crud.delete_database(db, database_id=database_id, user_id=current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return True
 
 
 @app.post("/api/query")
