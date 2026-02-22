@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 import models, schemas, auth
+import uuid
+import dynamic_db
 
 def get_user_by_username(db: Session, username: str):
     """
@@ -43,31 +45,30 @@ def get_database(db: Session, database_id: int, user_id: int):
 def create_database(db: Session, database: schemas.DatabaseCreate, user_id: int):
     """
     Create a new database for a user.
+    Generates a unique filename and creates the SQLite file.
     """
-    db_database = models.Database(**database.dict(), owner_id=user_id)
+    # Generate a unique filename: user_id_uuid.sqlite
+    filename = f"{user_id}_{uuid.uuid4()}.sqlite"
+    
+    db_database = models.Database(name=database.name, filename=filename, owner_id=user_id)
     db.add(db_database)
     db.commit()
     db.refresh(db_database)
-    return db_database
-
-def update_database(db: Session, database_id: int, database: schemas.DatabaseCreate, user_id: int):
-    """
-    Update an existing database.
-    """
-    db_database = get_database(db, database_id, user_id)
-    if db_database:
-        db_database.name = database.name
-        db_database.content = database.content
-        db.commit()
-        db.refresh(db_database)
+    
+    # Create the physical file
+    dynamic_db.create_db_file(filename)
+    
     return db_database
 
 def delete_database(db: Session, database_id: int, user_id: int):
     """
-    Delete a database.
+    Delete a database and its file.
     """
     db_database = get_database(db, database_id, user_id)
     if db_database:
+        # Delete physical file
+        dynamic_db.delete_db_file(db_database.filename)
+        
         db.delete(db_database)
         db.commit()
         return True
