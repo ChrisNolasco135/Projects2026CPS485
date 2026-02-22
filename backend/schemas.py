@@ -1,16 +1,37 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Any, Dict
 
-# Base schema for Database
+# Schemas for Dynamic DB Structure
+
+class ColumnDefinition(BaseModel):
+    name: str
+    type: str # TEXT, INTEGER, REAL, BLOB, NULL
+
+class TableCreate(BaseModel):
+    name: str
+    columns: List[ColumnDefinition]
+
+class RowCreate(BaseModel):
+    data: Dict[str, Any]
+
+class TableSchema(BaseModel):
+    name: str
+
+class ColumnSchema(BaseModel):
+    name: str
+    type: str
+    pk: bool
+
+# Base schema for Database Metadata
 class DatabaseBase(BaseModel):
     name: str
-    content: Dict[str, Any] = {} # Flexible JSON content
 
 class DatabaseCreate(DatabaseBase):
     pass
 
 class Database(DatabaseBase):
     id: int
+    filename: str
     owner_id: int
 
     class Config:
