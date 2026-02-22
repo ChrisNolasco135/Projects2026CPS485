@@ -27,3 +27,48 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+def get_databases(db: Session, user_id: int, skip: int = 0, limit: int = 100):
+    """
+    Retrieve all databases for a specific user.
+    """
+    return db.query(models.Database).filter(models.Database.owner_id == user_id).offset(skip).limit(limit).all()
+
+def get_database(db: Session, database_id: int, user_id: int):
+    """
+    Retrieve a specific database by ID and ensure it belongs to the user.
+    """
+    return db.query(models.Database).filter(models.Database.id == database_id, models.Database.owner_id == user_id).first()
+
+def create_database(db: Session, database: schemas.DatabaseCreate, user_id: int):
+    """
+    Create a new database for a user.
+    """
+    db_database = models.Database(**database.dict(), owner_id=user_id)
+    db.add(db_database)
+    db.commit()
+    db.refresh(db_database)
+    return db_database
+
+def update_database(db: Session, database_id: int, database: schemas.DatabaseCreate, user_id: int):
+    """
+    Update an existing database.
+    """
+    db_database = get_database(db, database_id, user_id)
+    if db_database:
+        db_database.name = database.name
+        db_database.content = database.content
+        db.commit()
+        db.refresh(db_database)
+    return db_database
+
+def delete_database(db: Session, database_id: int, user_id: int):
+    """
+    Delete a database.
+    """
+    db_database = get_database(db, database_id, user_id)
+    if db_database:
+        db.delete(db_database)
+        db.commit()
+        return True
+    return False
