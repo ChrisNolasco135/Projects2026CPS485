@@ -34,7 +34,7 @@ class Database(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
-    content = Column(JSON, default={}) # Stores tables, rows, columns as JSON
+    filename = Column(String, unique=True, index=True) # Stores the filename of the SQLite DB
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="databases")
