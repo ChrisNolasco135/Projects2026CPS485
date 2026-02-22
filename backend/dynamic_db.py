@@ -152,17 +152,29 @@ def add_row(filename: str, table_name: str, data: Dict[str, Any]):
     if not table_name.isidentifier():
         raise ValueError("Invalid table name")
     
-    columns = list(data.keys())
-    placeholders = ["?"] * len(columns)
-    values = list(data.values())
+    # Filter data to only valid columns
+    cursor.execute(f"PRAGMA table_info({table_name});")
+    valid_columns = {row[1] for row in cursor.fetchall()}
     
-    # Validate column names
-    for col in columns:
-        if not col.isidentifier():
-             raise ValueError("Invalid column name")
+    filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+    
+    if not filtered_data:
+        # If filtered_data is empty but data was not, it means all keys were invalid.
+        if data and not filtered_data:
+             raise ValueError("No valid columns provided")
+        
+    columns = list(filtered_data.keys())
+    placeholders = ["?"] * len(columns)
+    values = list(filtered_data.values())
 
-    query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)});"
-    cursor.execute(query, values)
+    if not columns:
+        # If no columns to insert (e.g. all defaults), use DEFAULT VALUES
+        query = f"INSERT INTO {table_name} DEFAULT VALUES;"
+        cursor.execute(query)
+    else:
+        query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)});"
+        cursor.execute(query, values)
+        
     conn.commit()
     row_id = cursor.lastrowid
     conn.close()
@@ -190,11 +202,20 @@ def update_row(filename: str, table_name: str, row_id: int, data: Dict[str, Any]
     if not table_name.isidentifier():
         raise ValueError("Invalid table name")
 
+    # Filter data to only valid columns
+    cursor.execute(f"PRAGMA table_info({table_name});")
+    valid_columns = {row[1] for row in cursor.fetchall()}
+    
+    filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+    
+    if not filtered_data:
+         # Nothing to update
+         conn.close()
+         return
+
     set_clauses = []
     values = []
-    for col, val in data.items():
-        if not col.isidentifier():
-             raise ValueError("Invalid column name")
+    for col, val in filtered_data.items():
         set_clauses.append(f"{col} = ?")
         values.append(val)
     
