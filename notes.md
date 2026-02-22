@@ -26,3 +26,19 @@ In order to work on the MVC architecture we need a model, view and a controller 
         - user's username and password exchanged directly for a JWT access token that lasts 30 minutes
     - Created User information endpoint (`/users/me`) to retrieve logged-in account details
     - Added comprehensive comments and documentation to all backend code
+
+## 3/17-3/24
+### Nathan Polarski
+- Implemented backend functionality for user-managed databases
+    - Created `Database` model to track user-owned SQLite databases
+    - Implemented file-based storage for user databases in `backend/user_databases/`
+    - Created `backend/dynamic_db.py` to handle direct SQLite file operations
+    - Added CRUD endpoints for:
+        - Databases (`/databases/`)
+        - Tables (`/databases/{id}/tables`)
+        - Columns (`/databases/{id}/tables/{name}/columns`)
+        - Rows (`/databases/{id}/tables/{name}/rows`)
+    - Implemented robust error handling:
+        - Catches `sqlite3.OperationalError` for missing tables and returns clear 400/404 errors
+        - Filters input data to prevent crashes from extra fields
+    - Updated API schemas to support dynamic table structures
