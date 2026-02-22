@@ -2,7 +2,7 @@ import sqlite3
 import os
 from typing import List, Dict, Any
 
-USER_DB_DIR = "backend/user_databases"
+USER_DB_DIR = "user_databases"
 
 def get_db_path(filename: str) -> str:
     """Returns the full path to the user's database file."""
