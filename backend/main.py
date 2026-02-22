@@ -130,9 +130,9 @@ def create_database(
 
 @app.get("/databases/", response_model=List[schemas.Database])
 def read_databases(
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
     skip: int = 0,
     limit: int = 100,
-    current_user: Annotated[schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     """
