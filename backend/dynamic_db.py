@@ -138,8 +138,15 @@ def get_rows(filename: str, table_name: str) -> List[Dict[str, Any]]:
     if not table_name.isidentifier():
         raise ValueError("Invalid table name")
         
-    cursor.execute(f"SELECT * FROM {table_name};")
-    rows = [dict(row) for row in cursor.fetchall()]
+    try:
+        cursor.execute(f"SELECT * FROM {table_name};")
+        rows = [dict(row) for row in cursor.fetchall()]
+    except sqlite3.OperationalError as e:
+        conn.close()
+        if "no such table" in str(e):
+             raise ValueError(f"Table '{table_name}' not found")
+        raise e
+        
     conn.close()
     return rows
 
@@ -153,8 +160,20 @@ def add_row(filename: str, table_name: str, data: Dict[str, Any]):
         raise ValueError("Invalid table name")
     
     # Filter data to only valid columns
-    cursor.execute(f"PRAGMA table_info({table_name});")
-    valid_columns = {row[1] for row in cursor.fetchall()}
+    try:
+        cursor.execute(f"PRAGMA table_info({table_name});")
+    except sqlite3.OperationalError as e:
+        conn.close()
+        raise e # PRAGMA shouldn't fail even if table missing (returns empty), but just in case
+        
+    # Check if table exists by seeing if we got any columns (or check master)
+    # PRAGMA table_info returns empty list if table doesn't exist
+    columns_info = cursor.fetchall()
+    if not columns_info:
+         conn.close()
+         raise ValueError(f"Table '{table_name}' not found")
+
+    valid_columns = {row[1] for row in columns_info}
     
     filtered_data = {k: v for k, v in data.items() if k in valid_columns}
     
@@ -189,8 +208,15 @@ def delete_row(filename: str, table_name: str, row_id: int):
     if not table_name.isidentifier():
         raise ValueError("Invalid table name")
         
-    cursor.execute(f"DELETE FROM {table_name} WHERE id = ?;", (row_id,))
-    conn.commit()
+    try:
+        cursor.execute(f"DELETE FROM {table_name} WHERE id = ?;", (row_id,))
+        conn.commit()
+    except sqlite3.OperationalError as e:
+        conn.close()
+        if "no such table" in str(e):
+             raise ValueError(f"Table '{table_name}' not found")
+        raise e
+        
     conn.close()
 
 def update_row(filename: str, table_name: str, row_id: int, data: Dict[str, Any]):
@@ -204,7 +230,12 @@ def update_row(filename: str, table_name: str, row_id: int, data: Dict[str, Any]
 
     # Filter data to only valid columns
     cursor.execute(f"PRAGMA table_info({table_name});")
-    valid_columns = {row[1] for row in cursor.fetchall()}
+    columns_info = cursor.fetchall()
+    if not columns_info:
+         conn.close()
+         raise ValueError(f"Table '{table_name}' not found")
+
+    valid_columns = {row[1] for row in columns_info}
     
     filtered_data = {k: v for k, v in data.items() if k in valid_columns}
     
