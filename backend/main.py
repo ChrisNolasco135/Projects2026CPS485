@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, List
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
-import crud, models, schemas, auth
+import crud, models, schemas, auth, dynamic_db
 from database import SessionLocal, engine
 
 # Create database tables if they don't exist
@@ -16,6 +16,8 @@ models.Base.metadata.create_all(bind=engine)
 # Initialize FastAPI app
 app = FastAPI()
 
+# Configure CORS middleware
+# Allow requests from frontend running on localhost:5173
 # Configure CORS middleware
 # Allow requests from frontend running on localhost:5173
 app.add_middleware(
@@ -117,9 +119,266 @@ async def read_users_me(
     """
     return current_user
 
+@app.post("/databases/", response_model=schemas.Database)
+def create_database(
+    database: schemas.DatabaseCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new database for the current user.
+    """
+    return crud.create_database(db=db, database=database, user_id=current_user.id)
+
+@app.get("/databases/", response_model=List[schemas.Database])
+def read_databases(
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List all databases for the current user.
+    """
+    databases = crud.get_databases(db, user_id=current_user.id, skip=skip, limit=limit)
+    return databases
+
+@app.get("/databases/{database_id}", response_model=schemas.Database)
+def read_database(
+    database_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific database by ID.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if db_database is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return db_database
+
+@app.get("/databases/{database_id}/tables", response_model=List[str])
+def list_tables(
+    database_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    List tables in a database.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return dynamic_db.get_tables(db_database.filename)
+
+@app.post("/databases/{database_id}/tables")
+def create_table(
+    database_id: int,
+    table: schemas.TableCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new table in the database.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        # Convert Pydantic models to dicts for dynamic_db
+        columns = [{"name": c.name, "type": c.type} for c in table.columns]
+        dynamic_db.create_table(db_database.filename, table.name, columns)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"message": "Table created"}
+
+@app.delete("/databases/{database_id}/tables/{table_name}")
+def drop_table(
+    database_id: int,
+    table_name: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Drop a table from the database.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        dynamic_db.drop_table(db_database.filename, table_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Table dropped"}
+
+@app.get("/databases/{database_id}/tables/{table_name}/columns")
+def get_columns(
+    database_id: int,
+    table_name: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Get columns of a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        return dynamic_db.get_columns(db_database.filename, table_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/databases/{database_id}/tables/{table_name}/columns")
+def add_column(
+    database_id: int,
+    table_name: str,
+    column: schemas.ColumnDefinition,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Add a column to a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        dynamic_db.add_column(db_database.filename, table_name, column.name, column.type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Column added"}
+
+@app.delete("/databases/{database_id}/tables/{table_name}/columns/{column_name}")
+def drop_column(
+    database_id: int,
+    table_name: str,
+    column_name: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Drop a column from a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        dynamic_db.drop_column(db_database.filename, table_name, column_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Column dropped"}
+
+@app.get("/databases/{database_id}/tables/{table_name}/rows")
+def get_rows(
+    database_id: int,
+    table_name: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Get rows of a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        return dynamic_db.get_rows(db_database.filename, table_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/databases/{database_id}/tables/{table_name}/rows")
+def add_row(
+    database_id: int,
+    table_name: str,
+    row: schemas.RowCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Add a row to a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        row_id = dynamic_db.add_row(db_database.filename, table_name, row.data)
+        return {"id": row_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/databases/{database_id}/tables/{table_name}/rows/{row_id}")
+def update_row(
+    database_id: int,
+    table_name: str,
+    row_id: int,
+    row: schemas.RowCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Update a row in a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        dynamic_db.update_row(db_database.filename, table_name, row_id, row.data)
+        return {"message": "Row updated"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/databases/{database_id}/tables/{table_name}/rows/{row_id}")
+def delete_row(
+    database_id: int,
+    table_name: str,
+    row_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a row from a table.
+    """
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    try:
+        dynamic_db.delete_row(db_database.filename, table_name, row_id)
+        return {"message": "Row deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/databases/{database_id}", response_model=bool)
+def delete_database(
+    database_id: int,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a database.
+    """
+    success = crud.delete_database(db, database_id=database_id, user_id=current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return True
+
 
 @app.post("/api/query")
 def read_api_query():
+    """
+    Simple example endpoint.
+    """
     """
     Simple example endpoint.
     """

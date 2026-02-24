@@ -18,14 +18,6 @@ In order to work on the MVC architecture we need a model, view and a controller 
 - Implemented inital basic FastAPI backend
 
 ## 3/10-3/17
-### Christopher Nolasco
-- Created NavBar component in upper part of the webpage for easy access to login and register prompts
-    - Added Login prompt and submit button for pre-existing users (none for now)
-    - Added Register prompt and submit button to add users to database
-- Used Axios for 'application/x-www-form-urlencoded' posts to the backend for OAuth2 authorization tokens for Login
-    - Changed auth.js to now use application/x-www-form-urlencoded as the content-type rather than json responses for authentication requests
-
-    
 ### Nathan Polarski
 - implemented the backend functionality for user accounts
     - Added user account database model for MVC architecture using SQLAlchemy and SQLite
@@ -34,3 +26,29 @@ In order to work on the MVC architecture we need a model, view and a controller 
         - user's username and password exchanged directly for a JWT access token that lasts 30 minutes
     - Created User information endpoint (`/users/me`) to retrieve logged-in account details
     - Added comprehensive comments and documentation to all backend code
+
+## 3/17-3/24
+### Christopher Nolasco
+- Added the DatabaseView view for database and table management
+    - Implemented appropriate display of database/tables based on currently logged in user
+    - Added database/table view, creation, modification and deletion feature
+    - Utilized `backend/dynamic_db.py` for file modifications based on user inputs through UI modals
+- Modified webpage UI and visuals
+    - Added simple gradient
+    - Changed button styling
+    - Removed Vue assets
+
+### Nathan Polarski
+- Implemented backend functionality for user-managed databases
+    - Created `Database` model to track user-owned SQLite databases
+    - Implemented file-based storage for user databases in `backend/user_databases/`
+    - Created `backend/dynamic_db.py` to handle direct SQLite file operations
+    - Added CRUD endpoints for:
+        - Databases (`/databases/`)
+        - Tables (`/databases/{id}/tables`)
+        - Columns (`/databases/{id}/tables/{name}/columns`)
+        - Rows (`/databases/{id}/tables/{name}/rows`)
+    - Implemented robust error handling:
+        - Catches `sqlite3.OperationalError` for missing tables and returns clear 400/404 errors
+        - Filters input data to prevent crashes from extra fields
+    - Updated API schemas to support dynamic table structures
