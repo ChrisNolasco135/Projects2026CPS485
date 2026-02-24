@@ -1,25 +1,27 @@
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
 import NavBar from './components/NavBar.vue';
 </script>
 
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <nav>
-        <h1>Smart Database Manager</h1>
-        <RouterLink to="/input">Input Page</RouterLink>
-      </nav>
-    </div>
-  </header>
   <NavBar />
-  <RouterView />
+  <main class="content">
+    <RouterView />
+  </main>
 </template>
 
 <style scoped>
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.content {
+  margin-top: 58px;
+  padding: 2rem;
+}
+
 header {
   line-height: 1.5;
   max-height: 100vh;
@@ -82,3 +84,22 @@ nav a:first-of-type {
   }
 }
 </style>
+
+<style>
+
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 25%, #fcbad3 50%, #a8d8ea 75%, #aa96da 100%);
+  background-size: 400% 400%;
+  background-attachment: fixed;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+</style>
+

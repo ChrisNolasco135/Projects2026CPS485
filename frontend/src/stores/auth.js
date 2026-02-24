@@ -23,11 +23,11 @@ actions: {
     })
     this.token = res.data.access_token
     // Optionally fetch user info:
-    const userRes = await axios.get(`${API}/users/me`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    })
+    // set default header for subsequent requests
+    axios.defaults.headers.common.Authorization = `Bearer ${this.token}`
+    const userRes = await axios.get(`${API}/users/me`)
     this.user = userRes.data.username
-    // Persist token if desired:
+    // Persist token
     localStorage.setItem('token', this.token)
   },
 
@@ -41,12 +41,27 @@ actions: {
     this.user = null
     this.token = null
     localStorage.removeItem('token')
+    // remove axios default header
+    delete axios.defaults.headers.common.Authorization
   },
 
   // Restore token on app start
   initFromLocal() {
     const t = localStorage.getItem('token')
-    if (t) this.token = t
+    if (t) {
+      this.token = t
+      // set default header so subsequent API calls include the token
+      axios.defaults.headers.common.Authorization = `Bearer ${t}`
+      // try to restore user info from backend; clear token on failure
+      axios.get(`${API}/users/me`).then(res => {
+        this.user = res.data.username
+      }).catch(() => {
+        this.user = null
+        this.token = null
+        localStorage.removeItem('token')
+        delete axios.defaults.headers.common.Authorization
+      })
+    }
   }
 }
 })
