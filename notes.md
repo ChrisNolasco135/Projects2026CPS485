@@ -28,6 +28,16 @@ In order to work on the MVC architecture we need a model, view and a controller 
     - Added comprehensive comments and documentation to all backend code
 
 ## 3/17-3/24
+### Christopher Nolasco
+- Added the DatabaseView view for database and table management
+    - Implemented appropriate display of database/tables based on currently logged in user
+    - Added database/table view, creation, modification and deletion feature
+    - Utilized `backend/dynamic_db.py` for file modifications based on user inputs through UI modals
+- Modified webpage UI and visuals
+    - Added simple gradient
+    - Changed button styling
+    - Removed Vue assets
+
 ### Nathan Polarski
 - Implemented backend functionality for user-managed databases
     - Created `Database` model to track user-owned SQLite databases

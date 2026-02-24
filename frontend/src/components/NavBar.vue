@@ -10,29 +10,37 @@ const username = ref('')
 const password = ref('')
 const email = ref('')
 const isRegister = ref(false)
+const loading = ref(false)
+const error = ref('')
 
-function submitLogin() {
-  auth.login(username.value, password.value)
-  clear()
+async function submitLogin() {
+  error.value = ''
+  loading.value = true
+  try {
+    await auth.login(username.value, password.value)
+    clear()
+    // redirect to home on success
+    router.push('/home')
+  } catch (err) {
+    error.value = err?.response?.data?.detail || err?.message || 'Login failed'
+  } finally {
+    loading.value = false
+  }
 }
 
-function submitRegister() {
-  auth.register(email.value, username.value, password.value)
-  clear()
-  isRegister.value = false
-}
-
-/*
 async function submitRegister() {
+  error.value = ''
+  loading.value = true
   try {
     await auth.register(email.value, username.value, password.value)
     clear()
     isRegister.value = false
-  } catch (e) {
-    alert(e.message)
+  } catch (err) {
+    error.value = err?.response?.data?.detail || err?.message || 'Registration failed'
+  } finally {
+    loading.value = false
   }
 }
-*/
 
 function clear() {
   username.value = ''
@@ -42,14 +50,14 @@ function clear() {
 
 function logout() {
   auth.logout()
-  router.push('/input')
+  router.push('/home')
 }
 </script>
 
 <template>
-  <nav class="navbar navbar-dark bg-dark fixed-top px-3">
+  <nav class="navbar navbar-dark bg-dark fixed-top px-3 m-0">
 
-    <RouterLink class="navbar-brand" to="/input">
+    <RouterLink class="navbar-brand ms-3" to="/home">
       Smart DB
     </RouterLink>
 
@@ -78,6 +86,8 @@ function logout() {
           required
         />
 
+        <div class="nav-error" v-if="error" style="color:#f8d7da;margin-left:.5rem">{{ error }}</div>
+
         <input
           class="form-control form-control-sm"
           type="password"
@@ -86,8 +96,8 @@ function logout() {
           required
         />
 
-        <button class="btn btn-success btn-sm">
-          {{ isRegister ? 'Register' : 'Login' }}
+        <button class="btn btn-success btn-sm" :disabled="loading">
+          {{ loading ? (isRegister ? 'Working...' : 'Signing in...') : (isRegister ? 'Register' : 'Login') }}
         </button>
 
         <button
