@@ -18,6 +18,8 @@ app = FastAPI()
 
 # Configure CORS middleware
 # Allow requests from frontend running on localhost:5173
+# Configure CORS middleware
+# Allow requests from frontend running on localhost:5173
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -374,6 +376,9 @@ def delete_database(
 
 @app.post("/api/query")
 def read_api_query():
+    """
+    Simple example endpoint.
+    """
     """
     Simple example endpoint.
     """
