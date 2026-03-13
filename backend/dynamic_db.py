@@ -6,7 +6,11 @@ USER_DB_DIR = "user_databases"
 
 def get_db_path(filename: str) -> str:
     """Returns the full path to the user's database file."""
-    return os.path.join(USER_DB_DIR, filename)
+    # Ensure the user databases directory exists
+    os.makedirs(USER_DB_DIR, exist_ok=True)
+    # Prevent directory traversal by using only the basename
+    safe_name = os.path.basename(filename)
+    return os.path.join(USER_DB_DIR, safe_name)
 
 def create_db_file(filename: str):
     """Creates an empty SQLite database file."""
