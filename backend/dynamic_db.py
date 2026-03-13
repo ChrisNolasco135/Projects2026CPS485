@@ -179,7 +179,7 @@ def add_row(filename: str, table_name: str, data: Dict[str, Any]):
 
     valid_columns = {row[1] for row in columns_info}
     
-    filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+    filtered_data = {k: v for k, v in data.items() if k in valid_columns and k != 'id'}
     
     if not filtered_data:
         # If filtered_data is empty but data was not, it means all keys were invalid.
@@ -241,7 +241,7 @@ def update_row(filename: str, table_name: str, row_id: int, data: Dict[str, Any]
 
     valid_columns = {row[1] for row in columns_info}
     
-    filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+    filtered_data = {k: v for k, v in data.items() if k in valid_columns and k != 'id'}
     
     if not filtered_data:
          # Nothing to update
