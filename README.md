@@ -31,6 +31,7 @@ A modern, full-stack web-app that allows users to manage multiple SQL databases 
 
 ### Backend
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python)
+- **Data Validation**: [Pydantic](https://docs.pydantic.dev/)
 - **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/)
 - **Database**: [SQLite](https://sqlite.org/)
 - **Security**: OAuth2 with Password flow, JWT tokens (python-jose), and BCrypt password hashing.
