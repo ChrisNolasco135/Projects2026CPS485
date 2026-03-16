@@ -62,7 +62,7 @@ async function selectDatabase(db) {
       `${API}/databases/${db.id}/tables`,
       { headers: { Authorization: `Bearer ${auth.token}` } }
     )
-    tables.value = response.data
+    tables.value = response.data.filter(table => table !== 'sqlite_sequence')
   } catch (err) {
     console.error('Error loading tables:', err)
     error.value = err.response?.data?.detail || err.message || 'Failed to load tables'
@@ -179,7 +179,7 @@ async function createTable() {
       `${API}/databases/${selectedDatabase.value.id}/tables`,
       { headers: { Authorization: `Bearer ${auth.token}` } }
     )
-    tables.value = response.data
+    tables.value = response.data.filter(table => table !== 'sqlite_sequence')
     closeCreateTableModal()
   } catch (err) {
     console.error('Error creating table:', err)
