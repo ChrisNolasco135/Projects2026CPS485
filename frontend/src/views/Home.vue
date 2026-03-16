@@ -22,7 +22,6 @@ function goToDatabases() {
     <h2>Welcome, {{ username }}</h2>
     <p>This is the Home dashboard. Use the navigation to access other pages.</p>
     <div class="button-group">
-      <button @click="goToInput" class="btn-primary">Open Input Page</button>
       <button @click="goToDatabases" class="btn-primary">Database Manager</button>
     </div>
   </main>
