@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import axios from 'axios'
 
@@ -21,13 +21,51 @@ const newTableColumns = ref([{ name: '', type: 'TEXT' }])
 const creating = ref(false)
 const showAddRowModal = ref(false)
 const showEditRowModal = ref(false)
+const showDatabaseMenu = ref(false)
+const showTableMenu = ref(false)
+
+function toggleDatabaseMenu() {
+  showDatabaseMenu.value = !showDatabaseMenu.value
+  if (showDatabaseMenu.value) {
+    showTableMenu.value = false
+  }
+}
+
+function toggleTableMenu() {
+  showTableMenu.value = !showTableMenu.value
+  if (showTableMenu.value) {
+    showDatabaseMenu.value = false
+  }
+}
+
+function closeMenus() {
+  showDatabaseMenu.value = false
+  showTableMenu.value = false
+}
+
+// Keep menus open if clicked inside. Close occurs only by toggle or action.
+function handleGlobalClick() {
+  // unused but retained for compatibility; menu stays open.
+  return
+}
+
 const newRowData = ref({})
 const editingRowData = ref({})
 const editingRowId = ref(null)
 const editingRowIndex = ref(null)
+const lookupOptions = ref({})
+const lookupRows = ref({})
+const fkMapping = ref({})
+const fkMappingEditor = ref({})
+const showFkMappingModal = ref(false)
+const showAddReferenceModal = ref(false)
+const selectedReferenceTable = ref(null)
+const selectedReferenceRowId = ref(null)
+const referenceTableRows = ref([])
 
 onMounted(() => {
   fetchDatabases()
+  loadFkMappings()
 })
 
 async function fetchDatabases() {
@@ -63,6 +101,7 @@ async function selectDatabase(db) {
       { headers: { Authorization: `Bearer ${auth.token}` } }
     )
     tables.value = response.data.filter(table => table !== 'sqlite_sequence')
+    loadFkMappings()
   } catch (err) {
     console.error('Error loading tables:', err)
     error.value = err.response?.data?.detail || err.message || 'Failed to load tables'
@@ -82,6 +121,7 @@ async function selectTable(tableName) {
       { headers: { Authorization: `Bearer ${auth.token}` } }
     )
     tableData.value = response.data
+    await loadLookupOptions()
   } catch (err) {
     console.error('Error loading table data:', err)
     error.value = err.response?.data?.detail || err.message || 'Failed to load table data'
@@ -90,13 +130,199 @@ async function selectTable(tableName) {
   }
 }
 
+function getReferencedTableName(col) {
+  if (!col.endsWith('_id')) return null
+  const base = col.slice(0, -3)
+  const candidates = [base, `${base}s`, `${base}es`, `${base.slice(0, -1)}ies`]
+  return tables.value.find(t => candidates.includes(t)) || null
+}
+
+async function loadLookupOptions() {
+  lookupOptions.value = {}
+  if (!selectedDatabase.value || !selectedTable.value) return
+
+  const fkCols = tableColumns.value.filter(c => c.endsWith('_id') || tableFkMapping.value[c])
+  for (const col of fkCols) {
+    const refTable = tableFkMapping.value[col] || getReferencedTableName(col)
+    if (!refTable) continue
+
+    try {
+      const response = await axios.get(
+        `${API}/databases/${selectedDatabase.value.id}/tables/${refTable}/rows`,
+        { headers: { Authorization: `Bearer ${auth.token}` } }
+      )
+      lookupRows.value[col] = response.data
+    lookupOptions.value[col] = response.data.map(row => {
+        const value = row.id != null ? row.id : row[Object.keys(row)[0]]
+        let label = row.name || row.title || ''
+        if (!label) {
+          const keys = Object.keys(row).filter(k => k !== 'id')
+          // prefer first/last/email if present
+          if (row.FirstName || row.LastName || row.Email) {
+            label = [row.FirstName, row.LastName, row.Email].filter(Boolean).join(' ')
+          } else {
+            label = keys.map(k => row[k]).filter(Boolean).join(' ')
+          }
+        }
+        label = label || String(value)
+        return { value, label }
+      })
+    } catch (err) {
+      console.warn(`Unable to load lookup options for ${col} from ${refTable}:`, err)
+    }
+  }
+}
+
+async function loadReferenceRows() {
+  referenceTableRows.value = []
+  if (!selectedDatabase.value || !selectedReferenceTable.value) return
+
+  try {
+    const response = await axios.get(
+      `${API}/databases/${selectedDatabase.value.id}/tables/${selectedReferenceTable.value}/rows`,
+      { headers: { Authorization: `Bearer ${auth.token}` } }
+    )
+    referenceTableRows.value = response.data
+  } catch (err) {
+    console.error('Error loading reference table rows:', err)
+    referenceTableRows.value = []
+  }
+}
+
+function loadFkMappings() {
+  if (!selectedDatabase.value) return
+  const key = `fkMappings_${selectedDatabase.value.id}`
+  const stored = localStorage.getItem(key)
+  if (stored) {
+    try {
+      fkMapping.value = JSON.parse(stored)
+    } catch (e) {
+      console.warn('Failed to parse stored FK mappings:', e)
+      fkMapping.value = {}
+    }
+  } else {
+    fkMapping.value = {}
+  }
+}
+
+function saveFkMappings() {
+  if (!selectedDatabase.value) return
+  const key = `fkMappings_${selectedDatabase.value.id}`
+  localStorage.setItem(key, JSON.stringify(fkMapping.value))
+}
+
+function closeFkMappingModal() {
+  showFkMappingModal.value = false
+}
+
+function openFkMappingModal() {
+  fkMappingEditor.value = { ...tableFkMapping.value }
+  showFkMappingModal.value = true
+}
+
+function saveFkMapping() {
+  if (!selectedTable.value) return
+  fkMapping.value = {
+    ...fkMapping.value,
+    [selectedTable.value]: { ...fkMappingEditor.value }
+  }
+  saveFkMappings()
+  showFkMappingModal.value = false
+  loadLookupOptions()
+}
+
+function openAddReferenceModal() {
+  selectedReferenceTable.value = null
+  selectedReferenceRowId.value = null
+  referenceTableRows.value = []
+  showAddReferenceModal.value = true
+}
+
+function closeAddReferenceModal() {
+  showAddReferenceModal.value = false
+}
+
+function applyReferenceSelection() {
+  if (!selectedTable.value || !selectedReferenceTable.value || !selectedReferenceRowId.value) return
+
+  const targetFkCols = Object.entries(tableFkMapping.value)
+    .filter(([, v]) => v === selectedReferenceTable.value)
+    .map(([k]) => k)
+
+  if (targetFkCols.length === 0) {
+    alert('No matching FK column in current table for this reference table. Define mapping first.')
+    return
+  }
+
+  const fkCol = targetFkCols[0]
+  newRowData.value[fkCol] = selectedReferenceRowId.value
+  showAddReferenceModal.value = false
+  openAddRowModal()
+}
+
+
+
+
+
 const tableColumns = computed(() => {
   if (tableData.value.length === 0) return []
   return Object.keys(tableData.value[0])
 })
 
+const tableFkMapping = computed(() => {
+  if (!selectedTable.value) return {}
+  return fkMapping.value[selectedTable.value] || {}
+})
+
+const visibleColumns = computed(() => {
+  // hide FK columns in base table view and show only data columns
+  return tableColumns.value.filter(col => !fkColumns.value.includes(col))
+})
+
+const fkColumns = computed(() => {
+  return tableColumns.value.filter(col => col.endsWith('_id') || tableFkMapping.value[col])
+})
+
+const fkDetailKeys = computed(() => {
+  const result = {}
+  for (const col of fkColumns.value) {
+    const rows = lookupRows.value[col] || []
+    if (rows.length === 0) {
+      result[col] = []
+      continue
+    }
+    const allKeys = Object.keys(rows[0]).filter(k => k !== 'id')
+    result[col] = allKeys
+  }
+  return result
+})
+
+const foreignBadgeLabel = (col) => {
+  const ref = tableFkMapping.value[col]
+  if (ref) return `${col} → ${ref}`
+  if (col.endsWith('_id')) return `${col} (FK)`
+  return ''
+}
+
+function fkDisplay(row, col) {
+  const value = row[col]
+  if (value == null) return ''
+  const lookup = lookupOptions.value[col] || []
+  const match = lookup.find(o => String(o.value) === String(value))
+  return match ? match.label : value
+}
+
+function fkDetailValue(row, col, key) {
+  const value = row[col]
+  if (value == null) return ''
+  const lookupFull = lookupRows.value[col] || []
+  const match = lookupFull.find(r => String(r.id) === String(value))
+  return match ? (match[key] ?? '') : ''
+}
+
 function openCreateTableModal() {
   showCreateTableModal.value = true
+  showTableMenu.value = false
   newTableName.value = ''
   newTableColumns.value = [{ name: '', type: 'TEXT' }]
 }
@@ -105,8 +331,10 @@ function closeCreateTableModal() {
   showCreateTableModal.value = false
 }
 
+
 function openCreateDatabaseModal() {
   showCreateDatabaseModal.value = true
+  showDatabaseMenu.value = false
   newDatabaseName.value = ''
 }
 
@@ -140,6 +368,64 @@ async function createDatabase() {
     error.value = err.response?.data?.detail || err.message || 'Failed to create database'
   } finally {
     creating.value = false
+  }
+}
+
+async function deleteDatabase(db) {
+  if (!confirm(`Delete database '${db.name}'? This cannot be undone.`)) return
+
+  error.value = ''
+  loading.value = true
+  try {
+    await axios.delete(
+      `${API}/databases/${db.id}`,
+      { headers: { Authorization: `Bearer ${auth.token}` } }
+    )
+
+    if (selectedDatabase.value && selectedDatabase.value.id === db.id) {
+      selectedDatabase.value = null
+      selectedTable.value = null
+      tableData.value = []
+      tables.value = []
+    }
+
+    await fetchDatabases()
+  } catch (err) {
+    console.error('Error deleting database:', err)
+    error.value = err.response?.data?.detail || err.message || 'Failed to delete database'
+  } finally {
+    loading.value = false
+    showDatabaseMenu.value = false
+  }
+}
+
+async function deleteTable(tableName) {
+  if (!confirm(`Delete table '${tableName}'? This cannot be undone.`)) return
+
+  error.value = ''
+  loading.value = true
+  try {
+    await axios.delete(
+      `${API}/databases/${selectedDatabase.value.id}/tables/${tableName}`,
+      { headers: { Authorization: `Bearer ${auth.token}` } }
+    )
+
+    if (selectedTable.value === tableName) {
+      selectedTable.value = null
+      tableData.value = []
+    }
+
+    const response = await axios.get(
+      `${API}/databases/${selectedDatabase.value.id}/tables`,
+      { headers: { Authorization: `Bearer ${auth.token}` } }
+    )
+    tables.value = response.data.filter(table => table !== 'sqlite_sequence')
+  } catch (err) {
+    console.error('Error deleting table:', err)
+    error.value = err.response?.data?.detail || err.message || 'Failed to delete table'
+  } finally {
+    loading.value = false
+    showTableMenu.value = false
   }
 }
 
@@ -189,12 +475,290 @@ async function createTable() {
   }
 }
 
+function openTableInNewWindow() {
+  if (!selectedTable.value) {
+    error.value = 'No table selected to view'
+    return
+  }
+
+  const newWindow = window.open('', '_blank', 'toolbar=no,scrollbars=yes,resizable=yes,width=1200,height=800')
+  if (!newWindow) {
+    error.value = 'Popup blocked. Please allow popups to view table in separate window.'
+    return
+  }
+
+  const columns = tableColumns.value
+  const data = tableData.value
+  const fkCols = fkColumns.value
+  const fkDetailKeysMap = fkDetailKeys.value
+  const lookupRowsMap = lookupRows.value
+
+  // Prepare data for JS
+  const dataJson = JSON.stringify(data)
+  const columnsJson = JSON.stringify(columns)
+  const fkColsJson = JSON.stringify(fkCols)
+  const fkDetailKeysJson = JSON.stringify(fkDetailKeysMap)
+  const lookupRowsJson = JSON.stringify(lookupRowsMap)
+
+  // Build display columns: visible + FK details
+  const displayColumns = []
+  const displayHeaders = []
+
+  // Add visible columns
+  visibleColumns.value.forEach(col => {
+    displayColumns.push({ type: 'visible', col })
+    displayHeaders.push(col)
+  })
+
+  // Add FK detail columns
+  fkCols.forEach(col => {
+    fkDetailKeysMap[col].forEach(key => {
+      displayColumns.push({ type: 'fk', col, key })
+      displayHeaders.push(key)
+    })
+  })
+
+  const displayColumnsJson = JSON.stringify(displayColumns)
+  const displayHeadersJson = JSON.stringify(displayHeaders)
+
+  const scriptContent = `
+    let allData = ${dataJson};
+    let columns = ${columnsJson};
+    let fkCols = ${fkColsJson};
+    let fkDetailKeys = ${fkDetailKeysJson};
+    let lookupRows = ${lookupRowsJson};
+    let displayColumns = ${displayColumnsJson};
+    let displayHeaders = ${displayHeadersJson};
+    let visibleColumns = [...columns];
+    let currentPage = 1;
+    const rowsPerPage = 50;
+    let selectedRows = new Set();
+
+    function getFkDetailValue(row, col, key) {
+      const value = row[col]
+      if (value == null) return ''
+      const lookupFull = lookupRows[col] || []
+      const match = lookupFull.find(r => String(r.id) === String(value))
+      return match ? (match[key] ?? '') : ''
+    }
+
+    function renderTable() {
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = allData.slice(start, end);
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = pageData.map((row, idx) => {
+        const globalIdx = start + idx;
+        const rowCells = displayColumns.map(dc => {
+          if (dc.type === 'visible') {
+            return '<td>' + (row[dc.col] ?? '') + '</td>';
+          } else if (dc.type === 'fk') {
+            return '<td>' + getFkDetailValue(row, dc.col, dc.key) + '</td>';
+          }
+          return '<td></td>';
+        }).join('');
+        const selectedClass = selectedRows.has(globalIdx) ? ' selected' : '';
+        return '<tr class="' + selectedClass + '" onclick="toggleRowSelection(' + globalIdx + ')">' + rowCells + '</tr>';
+      }).join('');
+
+      renderPagination();
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(allData.length / rowsPerPage);
+      const pagination = document.getElementById('pagination');
+      let html = '';
+      if (totalPages > 1) {
+        html += '<button onclick="changePage(1)">First</button>';
+        html += '<button onclick="changePage(' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>Prev</button>';
+        for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+          html += '<button onclick="changePage(' + i + ')" ' + (i === currentPage ? 'disabled' : '') + '>' + i + '</button>';
+        }
+        html += '<button onclick="changePage(' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>Next</button>';
+        html += '<button onclick="changePage(' + totalPages + ')">Last</button>';
+      }
+      pagination.innerHTML = html;
+    }
+
+    function changePage(page) {
+      if (page >= 1 && page <= Math.ceil(allData.length / rowsPerPage)) {
+        currentPage = page;
+        renderTable();
+      }
+    }
+
+    function toggleColumn(originalIdx) {
+      const col = columns[originalIdx];
+      const checkbox = event.target;
+      if (checkbox.checked) {
+        // Add back at correct position based on original order
+        let insertPos = 0;
+        for (let i = 0; i < originalIdx; i++) {
+          if (visibleColumns.includes(columns[i])) insertPos++;
+        }
+        visibleColumns.splice(insertPos, 0, col);
+      } else {
+        // Remove the column
+        const pos = visibleColumns.indexOf(col);
+        if (pos !== -1) visibleColumns.splice(pos, 1);
+      }
+      // Rebuild display columns based on visible columns
+      const newDisplayColumns = [];
+      const newDisplayHeaders = [];
+      visibleColumns.forEach(col => {
+        newDisplayColumns.push({ type: 'visible', col });
+        newDisplayHeaders.push(col);
+      });
+      fkCols.forEach(col => {
+        if (visibleColumns.includes(col)) return; // Skip if FK column itself is hidden
+        fkDetailKeys[col].forEach(key => {
+          newDisplayColumns.push({ type: 'fk', col, key });
+          newDisplayHeaders.push(key);
+        });
+      });
+      displayColumns = newDisplayColumns;
+      displayHeaders = newDisplayHeaders;
+      document.getElementById('table-head').innerHTML = '<tr>' + displayHeaders.map(h => '<th>' + h + '</th>').join('') + '</tr>';
+      renderTable();
+    }
+
+    function toggleRowSelection(idx) {
+      if (selectedRows.has(idx)) {
+        selectedRows.delete(idx);
+      } else {
+        selectedRows.add(idx);
+      }
+      renderTable();
+    }
+
+    function selectAllRows() {
+      selectedRows = new Set(Array.from({length: allData.length}, (_, i) => i));
+      renderTable();
+    }
+
+    function clearSelection() {
+      selectedRows.clear();
+      renderTable();
+    }
+
+    function deleteSelectedRows() {
+      if (confirm('Delete selected rows? This cannot be undone.')) {
+        allData = allData.filter((_, idx) => !selectedRows.has(idx));
+        selectedRows.clear();
+        document.getElementById('total-rows').textContent = allData.length;
+        renderTable();
+      }
+    }
+
+    function exportCSV() {
+      const csv = [displayHeaders.join(',')];
+      allData.forEach(row => {
+        const rowData = displayColumns.map(dc => {
+          let value;
+          if (dc.type === 'visible') {
+            value = row[dc.col] != null ? String(row[dc.col]) : '';
+          } else if (dc.type === 'fk') {
+            value = getFkDetailValue(row, dc.col, dc.key);
+          } else {
+            value = '';
+          }
+          return '"' + value.replace(/"/g, '""') + '"';
+        });
+        csv.push(rowData.join(','));
+      });
+      const blob = new Blob([csv.join('\\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '${selectedTable.value}.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    renderTable();
+  `
+
+  const content = `
+<html>
+<head>
+  <title>${selectedTable.value} - Data View</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #f6f8fa; position: sticky; top: 0; }
+    tbody tr:nth-child(odd) { background: #fbfbfb; }
+    .controls { margin-bottom: 1rem; }
+    .controls button { margin-right: 0.5rem; padding: 0.5rem; }
+    .column-toggle { margin: 0.5rem 0; }
+    .column-toggle label { margin-right: 1rem; }
+    .pagination { margin-top: 1rem; text-align: center; }
+    .pagination button { margin: 0 0.25rem; padding: 0.5rem; }
+    .selected { background: #e3f2fd; }
+  </style>
+</head>
+<body>
+  <h2>${selectedTable.value}</h2>
+  <p>Total rows: <span id="total-rows">${data.length}</span></p>
+
+  <div class="controls">
+    <button onclick="exportCSV()">Export to CSV</button>
+    <button onclick="selectAllRows()">Select All Rows</button>
+    <button onclick="clearSelection()">Clear Selection</button>
+    <button onclick="deleteSelectedRows()">Delete Selected Rows</button>
+  </div>
+
+  <div class="column-toggle">
+    <strong>Show Columns:</strong>
+    ${columns.map((col, idx) => `<label><input type="checkbox" checked onchange="toggleColumn(${idx})"> ${col}</label>`).join('')}
+  </div>
+
+  <div id="table-container" style="height:calc(100vh - 200px); overflow:auto;">
+    <table id="data-table">
+      <thead id="table-head"><tr>${displayHeaders.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+      <tbody id="table-body">
+        ${data.map((row, idx) => {
+          const rowCells = displayColumns.map(dc => {
+            if (dc.type === 'visible') {
+              return `<td>${row[dc.col] ?? ''}</td>`;
+            } else if (dc.type === 'fk') {
+              const value = row[dc.col];
+              if (value == null) return '<td></td>';
+              const lookupFull = lookupRowsMap[dc.col] || [];
+              const match = lookupFull.find(r => String(r.id) === String(value));
+              const detailValue = match ? (match[dc.key] ?? '') : '';
+              return `<td>${detailValue}</td>`;
+            }
+            return '<td></td>';
+          }).join('');
+          return `<tr onclick="toggleRowSelection(${idx})">${rowCells}</tr>`;
+        }).join('') || '<tr><td colspan="' + displayHeaders.length + '">No rows</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination" id="pagination">
+    <!-- Pagination controls will be added by JS -->
+  </div>
+
+  <script>
+    ${scriptContent}
+  <\/script>
+</body>
+</html>`
+
+  newWindow.document.write(content)
+  newWindow.document.close()
+}
+
 function openAddRowModal() {
   newRowData.value = {}
   tableColumns.value.filter(c => c !== 'id').forEach(col => {
     newRowData.value[col] = ''
   })
   showAddRowModal.value = true
+  loadLookupOptions()
 }
 
 function closeAddRowModal() {
@@ -208,6 +772,7 @@ function openEditRowModal(row, rowIndex) {
   // Find the row_id (assuming it's stored as 'id' column)
   editingRowId.value = row.id
   showEditRowModal.value = true
+  loadLookupOptions()
 }
 
 function closeEditRowModal() {
@@ -305,7 +870,15 @@ async function deleteRow(rowId) {
       <!-- Databases List -->
       <div class="db-sidebar">
         <h3>Databases</h3>
-        <button class="btn-create-database" @click="openCreateDatabaseModal">+ Create Database</button>
+        <div class="db-actions">
+          <button class="btn-create-database" @click="toggleDatabaseMenu">Database Actions ▾</button>
+          <div v-show="showDatabaseMenu" class="custom-dropdown-menu">
+            <button @click="openCreateDatabaseModal">Create Database</button>
+            <button @click="selectedDatabase && deleteDatabase(selectedDatabase)" :disabled="!selectedDatabase">
+              Delete Selected Database
+            </button>
+          </div>
+        </div>
         <div v-if="loading && !selectedDatabase" class="loading">Loading...</div>
         <div v-else-if="databases.length === 0" class="no-data">No databases</div>
         <div v-else class="db-list">
@@ -328,48 +901,87 @@ async function deleteRow(rowId) {
 
         <div v-else>
           <h3>{{ selectedDatabase.name }} - Tables</h3>
-          <button class="btn-create-table" @click="openCreateTableModal">+ Create Table</button>
-
-          <!-- Tables List -->
-          <div class="tables-list">
-            <div v-if="loading && !selectedTable" class="loading">Loading tables...</div>
-            <div v-else-if="tables.length === 0" class="no-data">No tables in this database</div>
-            <div v-else>
-              <button
-                v-for="tableName in tables"
-                :key="tableName"
-                :class="['table-btn', { active: selectedTable === tableName }]"
-                @click="selectTable(tableName)"
-              >
-                {{ tableName }}
+          <div class="db-actions">
+            <button class="btn-create-table" @click="toggleTableMenu">Table Actions ▾</button>
+            <div v-show="showTableMenu" class="custom-dropdown-menu">
+              <button @click="openCreateTableModal">Create Table</button>
+              <button @click="selectedTable && deleteTable(selectedTable)" :disabled="!selectedTable">
+                Delete Selected Table
               </button>
             </div>
           </div>
 
-          <!-- Table Data -->
-          <div v-if="selectedTable" class="table-data">
-            <h4>{{ selectedTable }}</h4>
-            <button class="btn-create-table" @click="openAddRowModal">+ Add Row</button>
-            <div v-if="loading" class="loading">Loading table data...</div>
-            <div v-else-if="tableData.length === 0" class="no-data">No data in this table</div>
-            <div v-else class="table-wrapper">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th v-for="col in tableColumns" :key="col">{{ col }}</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, idx) in tableData" :key="idx">
-                    <td v-for="col in tableColumns" :key="col">{{ row[col] }}</td>
-                    <td class="actions-cell">
-                      <button class="btn-action btn-edit" @click="openEditRowModal(row, idx)">Edit</button>
-                      <button class="btn-action btn-delete" @click="deleteRow(row.id)">Delete</button>
-                    </td>
-                  </tr>
+          <!-- Tables and Data Container (Side-by-side) -->
+          <div class="tables-data-container">
+            <!-- Tables List -->
+            <div class="tables-panel">
+              <h4>Tables</h4>
+              <div class="tables-list">
+                <div v-if="loading && !selectedTable" class="loading">Loading tables...</div>
+                <div v-else-if="tables.length === 0" class="no-data">No tables in this database</div>
+                <div v-else>
+                  <div v-for="tableName in tables" :key="tableName" class="table-row">
+                    <button
+                      :class="['table-btn', { active: selectedTable === tableName }]"
+                      @click="selectTable(tableName)"
+                    >
+                      {{ tableName }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Table Data -->
+            <div v-if="selectedTable" class="table-data-panel">
+              <h4>{{ selectedTable }}</h4>
+              <div class="table-controls">
+                <button class="btn-create-table" @click="openAddRowModal">+ Add Row</button>
+                <button class="btn-create-table" @click="openFkMappingModal">Manage References</button>
+                <button class="btn-create-table" @click="openAddReferenceModal">Add Reference</button>
+                <button class="btn-create-table" @click="openTableInNewWindow">Open in Separate Window</button>
+              </div>
+              <div v-if="loading" class="loading">Loading table data...</div>
+              <div v-else-if="tableData.length === 0" class="no-data">No data in this table</div>
+              <div v-else class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th v-for="col in visibleColumns" :key="col">{{ col }}</th>
+                      <template v-for="col in fkColumns" :key="col">
+                        <th
+                          v-for="key in fkDetailKeys[col]"
+                          :key="col + '-' + key"
+                        >
+                          {{ key }}
+                        </th>
+                      </template>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in tableData" :key="idx">
+                      <td v-for="col in visibleColumns" :key="col">
+                        {{ row[col] }}
+                      </td>
+
+                      <template v-for="col in fkColumns" :key="col">
+                        <td
+                          v-for="key in fkDetailKeys[col]"
+                          :key="col + '-' + key + '-' + idx"
+                        >
+                          {{ fkDetailValue(row, col, key) }}
+                        </td>
+                      </template>
+
+                      <td class="actions-cell">
+                        <button class="btn-action btn-edit" @click="openEditRowModal(row, idx)">Edit</button>
+                        <button class="btn-action btn-delete" @click="deleteRow(row.id)">Delete</button>
+                      </td>
+                    </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -473,13 +1085,31 @@ async function deleteRow(rowId) {
         <div class="modal-body">
           <div v-for="col in tableColumns.filter(c => c !== 'id')" :key="col" class="form-group">
             <label :for="`add-${col}`">{{ col }}:</label>
-            <input
-              :id="`add-${col}`"
-              v-model="newRowData[col]"
-              type="text"
-              class="form-input"
-              :placeholder="`Enter ${col}`"
-            />
+            <template v-if="lookupOptions[col] && lookupOptions[col].length">
+              <select
+                :id="`add-${col}`"
+                v-model="newRowData[col]"
+                class="form-input"
+              >
+                <option value="" disabled>Select {{ col }}</option>
+                <option
+                  v-for="opt in lookupOptions[col]"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
+            </template>
+            <template v-else>
+              <input
+                :id="`add-${col}`"
+                v-model="newRowData[col]"
+                type="text"
+                class="form-input"
+                :placeholder="`Enter ${col}`"
+              />
+            </template>
           </div>
         </div>
 
@@ -488,6 +1118,72 @@ async function deleteRow(rowId) {
           <button @click="addRow" :disabled="creating" class="btn-submit">
             {{ creating ? 'Adding...' : 'Add Row' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FK Mapping Modal -->
+    <div v-if="showFkMappingModal" class="modal-overlay" @click="closeFkMappingModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>Reference Mapping for {{ selectedTable }}</h3>
+          <button class="modal-close" @click="closeFkMappingModal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div v-if="tableColumns.length === 0" class="no-data">No columns available yet</div>
+          <div v-else>
+            <div v-for="col in tableColumns.filter(c => c !== 'id')" :key="col" class="form-group">
+              <label>{{ col }} is reference to</label>
+              <select v-model="fkMappingEditor[col]" class="form-input">
+                <option :value="null">-- none --</option>
+                <option v-for="tab in tables" :key="tab" :value="tab">{{ tab }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button @click="closeFkMappingModal" class="btn-cancel">Cancel</button>
+          <button @click="saveFkMapping(tableFkMapping)" class="btn-submit">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Reference Modal -->
+    <div v-if="showAddReferenceModal" class="modal-overlay" @click="closeAddReferenceModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>Pick Reference for {{ selectedTable }}</h3>
+          <button class="modal-close" @click="closeAddReferenceModal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="reference-table">Reference Table</label>
+            <select id="reference-table" v-model="selectedReferenceTable" class="form-input" @change="loadReferenceRows">
+              <option value="" disabled>Select table</option>
+              <option v-for="tab in tables" :key="tab" :value="tab">{{ tab }}</option>
+            </select>
+          </div>
+
+          <div v-if="selectedReferenceTable">
+            <div v-if="referenceTableRows.length === 0" class="no-data">No rows found for selected reference table</div>
+            <div v-else class="form-group">
+              <label for="reference-row">Reference Row</label>
+              <select id="reference-row" v-model="selectedReferenceRowId" class="form-input">
+                <option value="" disabled>Select row</option>
+                <option v-for="row in referenceTableRows" :key="row.id" :value="row.id">
+                  {{ row.id }} - {{ row.name || row.title || Object.values(row).slice(1).join(' ') }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button @click="closeAddReferenceModal" class="btn-cancel">Cancel</button>
+          <button @click="applyReferenceSelection" :disabled="!selectedReferenceTable || !selectedReferenceRowId" class="btn-submit">Use reference and add row</button>
         </div>
       </div>
     </div>
@@ -503,13 +1199,31 @@ async function deleteRow(rowId) {
         <div class="modal-body">
           <div v-for="col in tableColumns.filter(c => c !== 'id')" :key="col" class="form-group">
             <label :for="`edit-${col}`">{{ col }}:</label>
-            <input
-              :id="`edit-${col}`"
-              v-model="editingRowData[col]"
-              type="text"
-              class="form-input"
-              :placeholder="`Enter ${col}`"
-            />
+            <template v-if="lookupOptions[col] && lookupOptions[col].length">
+              <select
+                :id="`edit-${col}`"
+                v-model="editingRowData[col]"
+                class="form-input"
+              >
+                <option value="" disabled>Select {{ col }}</option>
+                <option
+                  v-for="opt in lookupOptions[col]"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
+            </template>
+            <template v-else>
+              <input
+                :id="`edit-${col}`"
+                v-model="editingRowData[col]"
+                type="text"
+                class="form-input"
+                :placeholder="`Enter ${col}`"
+              />
+            </template>
           </div>
         </div>
 
@@ -565,16 +1279,83 @@ h4 { margin-top: 1rem; margin-bottom: 0.5rem; }
 }
 
 .db-item {
-  padding: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
   border-radius: 4px;
-  cursor: pointer;
   background-color: white;
   transition: all 0.2s;
 }
 
 .db-item:hover {
   background-color: #f5f5f5;
+}
+
+.db-item-label {
+  flex: 1;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-actions {
+  position: relative;
+  margin-bottom: 1rem;
+  display: inline-block;
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background:white;
+  min-width: 180px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border:1px solid #ddd;
+  border-radius:4px;
+  z-index: 1000;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.custom-dropdown-menu button {
+  width:100%;
+  padding:0.5rem 0.75rem;
+  border:none;
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
+}
+
+.dropdown-menu button:hover {
+  background:#f5f5f5;
+}
+
+.btn-db-delete,
+.btn-table-delete {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.btn-db-delete:hover,
+.btn-table-delete:hover {
+  background-color: #c82333;
+}
+
+.table-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .db-item.active {
@@ -614,6 +1395,53 @@ h4 { margin-top: 1rem; margin-bottom: 0.5rem; }
   margin-bottom: 1.5rem;
 }
 
+/* New side-by-side flex layout */
+.tables-data-container {
+  display: flex;
+  gap: 1.5rem;
+  height: calc(100vh - 300px);
+}
+
+.tables-panel {
+  width: 200px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.9);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.tables-panel h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.table-data-panel {
+  flex: 1;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.9);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-data-panel h4 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.table-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: nowrap;
+}
+
 .table-btn {
   padding: 0.5rem 1rem;
   border: 1px solid #ddd;
@@ -635,6 +1463,9 @@ h4 { margin-top: 1rem; margin-bottom: 0.5rem; }
 
 .table-wrapper {
   overflow-x: auto;
+  flex: 1;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
 
 .data-table {
