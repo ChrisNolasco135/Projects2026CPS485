@@ -204,7 +204,7 @@ def add_row(filename: str, table_name: str, data: Dict[str, Any]):
     return row_id
 
 def delete_row(filename: str, table_name: str, row_id: int):
-    """Deletes a row by ID."""
+    """Deletes a row by ID and renumbers the remaining rows to keep IDs consecutive."""
     filepath = get_db_path(filename)
     conn = sqlite3.connect(filepath)
     cursor = conn.cursor()
@@ -214,6 +214,16 @@ def delete_row(filename: str, table_name: str, row_id: int):
         
     try:
         cursor.execute(f"DELETE FROM {table_name} WHERE id = ?;", (row_id,))
+        
+        # Renumber the remaining rows to keep IDs consecutive
+        cursor.execute(f"UPDATE {table_name} SET id = id - 1 WHERE id > ?;", (row_id,))
+        
+        # Reset the AUTOINCREMENT sequence to the new max ID
+        cursor.execute(f"SELECT MAX(id) FROM {table_name};")
+        max_id = cursor.fetchone()[0]
+        if max_id is not None:
+            cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?;", (max_id, table_name))
+        
         conn.commit()
     except sqlite3.OperationalError as e:
         conn.close()
