@@ -191,7 +191,7 @@ async function createTable() {
 
 function openAddRowModal() {
   newRowData.value = {}
-  tableColumns.value.forEach(col => {
+  tableColumns.value.filter(c => c !== 'id').forEach(col => {
     newRowData.value[col] = ''
   })
   showAddRowModal.value = true
@@ -471,7 +471,7 @@ async function deleteRow(rowId) {
         </div>
 
         <div class="modal-body">
-          <div v-for="col in tableColumns" :key="col" class="form-group">
+          <div v-for="col in tableColumns.filter(c => c !== 'id')" :key="col" class="form-group">
             <label :for="`add-${col}`">{{ col }}:</label>
             <input
               :id="`add-${col}`"
@@ -501,7 +501,7 @@ async function deleteRow(rowId) {
         </div>
 
         <div class="modal-body">
-          <div v-for="col in tableColumns" :key="col" class="form-group">
+          <div v-for="col in tableColumns.filter(c => c !== 'id')" :key="col" class="form-group">
             <label :for="`edit-${col}`">{{ col }}:</label>
             <input
               :id="`edit-${col}`"
