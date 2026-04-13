@@ -10,6 +10,8 @@ from jose import JWTError, jwt
 import crud, models, schemas, auth, dynamic_db
 from database import SessionLocal, engine
 
+import ai_agent
+
 # Create database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
 
@@ -373,13 +375,40 @@ def delete_database(
         raise HTTPException(status_code=404, detail="Database not found")
     return True
 
-
-@app.post("/api/query")
-def read_api_query():
+@app.post("/databases/{database_id}/ask", response_model=schemas.AIQueryResponse)
+async def ask_ai_database_question(
+    database_id: int,
+    query_req: schemas.AIQueryRequest,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
     """
-    Simple example endpoint.
+    Takes a natural language question, generates SQL, and returns the data.
     """
-    """
-    Simple example endpoint.
-    """
-    return {"Hello": "World"}
+    # 1. Verify database ownership
+    db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
+    if not db_database:
+        raise HTTPException(status_code=404, detail="Database not found")
+        
+    try:
+        # 2. Extract context
+        schema_context = ai_agent.get_database_schema(db_database.filename)
+        
+        # 3. Generate SQL asynchronously
+        generated_sql = await ai_agent.generate_sql(schema_context, query_req.question)
+        
+        # 4. Execute safely
+        results = ai_agent.execute_read_only_sql(db_database.filename, generated_sql)
+        
+        return schemas.AIQueryResponse(
+            sql_query=generated_sql,
+            results=results,
+            error=None
+        )
+        
+    except ValueError as e:
+        # Catch security violations (e.g., non-SELECT queries)
+        return schemas.AIQueryResponse(sql_query=generated_sql, error=str(e))
+    except Exception as e:
+        # Catch SQL syntax errors hallucinated by the LLM
+        return schemas.AIQueryResponse(sql_query=generated_sql, error=f"Database execution failed: {str(e)}")
