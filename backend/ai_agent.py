@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv() 
 
-AI_BASE_URL = "https://gpt.hydra.newpaltz.edu/" 
+AI_BASE_URL = "https://gpt.hydra.newpaltz.edu/api/v1" 
 AI_MODEL = "deepseek-coder-v2:16b"
 API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
