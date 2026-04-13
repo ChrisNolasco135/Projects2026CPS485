@@ -389,6 +389,8 @@ async def ask_ai_database_question(
     db_database = crud.get_database(db, database_id=database_id, user_id=current_user.id)
     if not db_database:
         raise HTTPException(status_code=404, detail="Database not found")
+    
+    generated_sql = ""
         
     try:
         # 2. Extract context
