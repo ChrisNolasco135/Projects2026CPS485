@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv() 
 
-AI_BASE_URL = "https://gpt.hydra.newpaltz.edu/api/v1" 
-AI_MODEL = "deepseek-coder-v2:16b"
-API_KEY = os.getenv("DEEPSEEK_API_KEY")
+AI_BASE_URL = "https://api.groq.com/openai/v1"
+AI_MODEL = "llama-3.1-8b-instant"
+API_KEY = os.getenv("AGENT_API_KEY") # set in .env file as DEEPSEEK_API_KEY=your_api_key_here
 
 client = AsyncOpenAI(base_url=AI_BASE_URL, api_key=API_KEY)
 
