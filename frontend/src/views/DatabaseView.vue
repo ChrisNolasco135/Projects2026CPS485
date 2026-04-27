@@ -63,6 +63,9 @@ const selectedReferenceTable = ref(null)
 const selectedReferenceRowId = ref(null)
 const referenceTableRows = ref([])
 
+const aiQuestion = ref('')
+const aiLoading = ref(false)
+
 onMounted(() => {
   fetchDatabases()
   loadFkMappings()
@@ -260,9 +263,90 @@ function applyReferenceSelection() {
   openAddRowModal()
 }
 
+async function askAI() {
+  if (!selectedDatabase.value || !aiQuestion.value.trim()) return
 
+  aiLoading.value = true
+  error.value = ''
+  try {
+    const response = await axios.post(`${API}/databases/${selectedDatabase.value.id}/ask`, {
+      question: aiQuestion.value
+    }, {
+      headers: { Authorization: `Bearer ${auth.token}` }
+    })
 
+    openAIResultsInNewWindow(response.data)
+  } catch (err) {
+    console.error('Error asking AI:', err)
+    error.value = err.response?.data?.detail || err.message || 'Failed to ask AI'
+  } finally {
+    aiLoading.value = false
+  }
+}
 
+function openAIResultsInNewWindow(aiResponse) {
+  const newWindow = window.open('', '_blank', 'toolbar=no,scrollbars=yes,resizable=yes,width=1200,height=800')
+  if (!newWindow) {
+    error.value = 'Popup blocked. Please allow popups to view AI results in separate window.'
+    return
+  }
+
+  const sqlQuery = aiResponse.sql_query
+  const results = aiResponse.results || []
+  const errorMsg = aiResponse.error
+
+  let content = `
+<html>
+<head>
+  <title>AI Query Results</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    .sql-query { background: #f6f8fa; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; white-space: pre-wrap; }
+    .error { color: red; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #f6f8fa; }
+    tbody tr:nth-child(odd) { background: #fbfbfb; }
+  </style>
+</head>
+<body>
+  <h2>AI Query Results</h2>
+  <div class="sql-query">
+    <strong>Generated SQL:</strong><br>
+    ${sqlQuery}
+  </div>`
+
+  if (errorMsg) {
+    content += `<div class="error">Error: ${errorMsg}</div>`
+  } else if (results.length === 0) {
+    content += `<p>No results found.</p>`
+  } else {
+    const columns = Object.keys(results[0])
+    content += `
+  <p>Total rows: ${results.length}</p>
+  <table>
+    <thead>
+      <tr>
+        ${columns.map(col => `<th>${col}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${results.map(row => `
+        <tr>
+          ${columns.map(col => `<td>${row[col] ?? ''}</td>`).join('')}
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>`
+  }
+
+  content += `
+</body>
+</html>`
+
+  newWindow.document.write(content)
+  newWindow.document.close()
+}
 
 const tableColumns = computed(() => {
   if (tableData.value.length === 0) return []
@@ -941,6 +1025,28 @@ async function deleteRow(rowId) {
                 <button class="btn-create-table" @click="openAddReferenceModal">Add Reference</button>
                 <button class="btn-create-table" @click="openTableInNewWindow">Open in Separate Window</button>
               </div>
+
+              <!-- AI Query Section -->
+              <div class="ai-query-section">
+                <h4>Ask AI about the Data</h4>
+                <div class="ai-query-form">
+                  <input
+                    v-model="aiQuestion"
+                    type="text"
+                    placeholder="Ask a question about the data..."
+                    class="form-input"
+                    @keyup.enter="askAI"
+                  >
+                  <button
+                    @click="askAI"
+                    :disabled="!aiQuestion.trim() || aiLoading"
+                    class="btn-submit"
+                  >
+                    {{ aiLoading ? 'Asking...' : 'Ask AI' }}
+                  </button>
+                </div>
+              </div>
+
               <div v-if="loading" class="loading">Loading table data...</div>
               <div v-else-if="tableData.length === 0" class="no-data">No data in this table</div>
               <div v-else class="table-wrapper">
@@ -1558,6 +1664,47 @@ h4 { margin-top: 1rem; margin-bottom: 0.5rem; }
 
 .btn-create-table:hover {
   background-color: #218838;
+}
+
+.ai-query-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.ai-query-section h4 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.ai-query-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ai-query-form .form-input {
+  flex: 1;
+}
+
+.btn-submit {
+  padding: 0.6rem 1.2rem;
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background-color: #0b5ed7;
+}
+
+.btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .modal-overlay {

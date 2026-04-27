@@ -64,3 +64,11 @@ class Token(BaseModel):
 # Schema for Token payload data
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+class AIQueryRequest(BaseModel):
+    question: str
+
+class AIQueryResponse(BaseModel):
+    sql_query: str
+    results: Optional[List[Dict[str, Any]]] = None
+    error: Optional[str] = None
