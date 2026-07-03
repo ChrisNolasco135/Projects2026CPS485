@@ -59,7 +59,7 @@ def execute_read_only_sql(filename: str, sql: str) -> list[dict]:
         raise ValueError("Security Violation: AI generated a non-SELECT query.")
         
     filepath = dynamic_db.get_db_path(filename)
-    conn = sqlite3.connect(filepath)
+    conn = sqlite3.connect(f"file:{filepath}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
