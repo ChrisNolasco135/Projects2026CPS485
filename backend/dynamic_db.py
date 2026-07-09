@@ -30,7 +30,7 @@ def get_tables(filename: str) -> List[str]:
     filepath = get_db_path(filename)
     conn = sqlite3.connect(filepath)
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence';")
     tables = [row[0] for row in cursor.fetchall()]
     conn.close()
     return tables
